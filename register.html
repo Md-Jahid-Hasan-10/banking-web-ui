@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Register - Banking</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="auth-wrap">
+    <div class="card">
+        <h1>Create account</h1>
+        <div id="msg" class="msg" hidden></div>
+        <form id="form" novalidate>
+            <div class="form-group">
+                <label for="fullName">Full name</label>
+                <input id="fullName" type="text" maxlength="100" autocomplete="name" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input id="email" type="email" autocomplete="email" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input id="password" type="password" minlength="8" maxlength="64" autocomplete="new-password" required>
+                <div class="hint">8 to 64 characters.</div>
+            </div>
+            <div class="form-group">
+                <label for="confirm">Confirm password</label>
+                <input id="confirm" type="password" autocomplete="new-password" required>
+            </div>
+            <button id="submit" class="btn btn-block" type="submit">Register</button>
+        </form>
+        <p class="center hint">Already registered? <a class="link" href="login.html">Log in</a></p>
+    </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script>
+    (function () {
+        if (Session.get()) {
+            window.location.replace("dashboard.html");
+            return;
+        }
+
+        const msg = $("msg");
+        const btn = $("submit");
+
+        $("form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            hideMessage(msg);
+
+            const fullName = $("fullName").value.trim();
+            const email = $("email").value.trim();
+            const password = $("password").value;
+
+            if (!fullName) return showMessage(msg, "Full name is required", "error");
+            if (!/^\S+@\S+\.\S+$/.test(email)) return showMessage(msg, "Enter a valid email", "error");
+            if (password.length < 8 || password.length > 64) {
+                return showMessage(msg, "Password must be 8 to 64 characters", "error");
+            }
+            if (password !== $("confirm").value) {
+                return showMessage(msg, "Passwords do not match", "error");
+            }
+
+            setBusy(btn, true, "Creating...");
+            try {
+                await Api.register({ fullName, email, password });
+                window.location.replace("login.html?registered=1");
+            } catch (err) {
+                showMessage(msg, err.message, "error");
+                setBusy(btn, false);
+            }
+        });
+    })();
+</script>
+</body>
+</html>
