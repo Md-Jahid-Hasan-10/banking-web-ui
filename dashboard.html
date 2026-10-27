@@ -1,88 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dashboard - Banking</title>
-    <link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard - Banking</title>
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<nav id="nav" class="nav"></nav>
-<main class="container">
+  <nav id="nav" class="nav"></nav>
+  <main class="container">
     <h1 id="welcome">Dashboard</h1>
     <div id="msg" class="msg" hidden></div>
 
     <section class="card">
-        <div class="row-between">
-            <h2>My accounts</h2>
-            <div class="actions">
-                <select id="accountType" aria-label="Account type">
-                    <option value="SAVINGS">Savings</option>
-                    <option value="CURRENT">Current</option>
-                </select>
-                <button id="createBtn" class="btn" type="button">Open account</button>
-            </div>
+      <div class="row-between">
+        <h2>My accounts</h2>
+        <div class="actions">
+          <select id="accountType" aria-label="Account type">
+            <option value="SAVINGS">Savings</option>
+            <option value="CURRENT">Current</option>
+          </select>
+          <button id="createBtn" class="btn" type="button">Open account</button>
         </div>
-        <div id="accounts" class="accounts"></div>
+      </div>
+      <div id="accounts" class="accounts"></div>
     </section>
-</main>
+  </main>
 
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/ui.js"></script>
-<script>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
     (async function () {
-        const session = requireAuth();
-        if (!session) return;
+      const session = requireAuth();
+      if (!session) return;
 
-        renderNav("dashboard.html");
-        $("welcome").textContent = "Welcome, " + session.fullName;
+      renderNav("dashboard.html");
+      $("welcome").textContent = "Welcome, " + session.fullName;
 
-        const msg = $("msg");
-        const list = $("accounts");
-        const createBtn = $("createBtn");
+      const msg = $("msg");
+      const list = $("accounts");
+      const createBtn = $("createBtn");
 
-        if (CONFIG.USE_MOCK) {
-            showMessage(msg, "Mock mode: accounts shown here are fake test data.", "info");
+      function render(accounts) {
+        list.textContent = "";
+        if (!accounts || accounts.length === 0) {
+          list.appendChild(makeEl("p", "hint", "You have no accounts yet. Open one above."));
+          return;
         }
-
-        function render(accounts) {
-            list.textContent = "";
-            if (!accounts || accounts.length === 0) {
-                list.appendChild(makeEl("p", "hint", "You have no accounts yet. Open one above."));
-                return;
-            }
-            accounts.forEach((a) => {
-                const card = makeEl("div", "account-card");
-                card.appendChild(makeEl("div", "type", a.accountType));
-                card.appendChild(makeEl("div", "number", a.accountNumber));
-                card.appendChild(makeEl("div", "balance", formatMoney(a.balance, a.currency)));
-                list.appendChild(card);
-            });
-        }
-
-        async function load() {
-            try {
-                render(await Api.listAccounts());
-            } catch (err) {
-                showMessage(msg, err.message, "error");
-            }
-        }
-
-        createBtn.addEventListener("click", async () => {
-            hideMessage(msg);
-            setBusy(createBtn, true, "Opening...");
-            try {
-                await Api.createAccount($("accountType").value);
-                await load();
-            } catch (err) {
-                showMessage(msg, err.message, "error");
-            }
-            setBusy(createBtn, false);
+        accounts.forEach(function (a) {
+          const card = makeEl("div", "account-card");
+          card.appendChild(makeEl("div", "type", a.accountType));
+          card.appendChild(makeEl("div", "number", a.accountNumber));
+          card.appendChild(makeEl("div", "balance", formatMoney(a.balance, a.currency)));
+          list.appendChild(card);
         });
+      }
 
-        load();
+      async function load() {
+        try {
+          render(await Api.listAccounts());
+        } catch (err) {
+          showMessage(msg, err.message, "error");
+        }
+      }
+
+      createBtn.addEventListener("click", async function () {
+        hideMessage(msg);
+        setBusy(createBtn, true, "Opening...");
+        try {
+          await Api.createAccount($("accountType").value);
+          await load();
+        } catch (err) {
+          showMessage(msg, err.message, "error");
+        }
+        setBusy(createBtn, false);
+      });
+
+      load();
     })();
-</script>
+  </script>
 </body>
 </html>

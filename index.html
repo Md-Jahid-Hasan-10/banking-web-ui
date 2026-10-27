@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Banking</title>
-    <script>
-        try {
-            const s = JSON.parse(sessionStorage.getItem("auth"));
-            window.location.replace(s && s.token ? "dashboard.html" : "login.html");
-        } catch (e) {
-            window.location.replace("login.html");
-        }
-    </script>
+  <meta charset="UTF-8">
+  <title>Banking</title>
+  <script>
+    try {
+      var s = JSON.parse(sessionStorage.getItem("auth"));
+      window.location.replace(s && s.token ? "dashboard.html" : "login.html");
+    } catch (e) {
+      window.location.replace("login.html");
+    }
+  </script>
 </head>
 <body></body>
 </html>

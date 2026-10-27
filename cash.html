@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Deposit / Withdraw - Banking</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav id="nav" class="nav"></nav>
+<main class="container">
+    <h1>Deposit or withdraw</h1>
+    <div id="msg" class="msg" hidden></div>
+
+    <section id="step1" class="card">
+        <form id="form1" novalidate>
+            <div class="form-group">
+                <label for="kind">What do you want to do?</label>
+                <select id="kind">
+                    <option value="deposit">Deposit money</option>
+                    <option value="withdraw">Withdraw money</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="account">Account</label>
+                <select id="account"></select>
+            </div>
+            <div class="form-group">
+                <label for="amount">Amount</label>
+                <input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+                <div class="hint">Up to 1,000,000.00 with at most 2 decimals. No fee.</div>
+            </div>
+            <button id="submit1" class="btn" type="submit">Continue</button>
+        </form>
+    </section>
+
+    <section id="step2" class="card" hidden>
+        <h2>Confirm</h2>
+        <div class="summary">
+            <div><span class="label">Action</span><span id="sKind"></span></div>
+            <div><span class="label">Account</span><span id="sAccount"></span></div>
+            <div><span class="label">Amount</span><span id="sAmount"></span></div>
+            <div><span class="label">Fee</span><span id="sFee"></span></div>
+            <div><strong id="sTotalLabel"></strong><strong id="sTotal"></strong></div>
+        </div>
+        <form id="form2" novalidate>
+            <div class="form-group">
+                <label for="otp">One-time password</label>
+                <input id="otp" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 digits">
+                <div id="otpHint" class="hint">We sent a 6-digit code to your email. It expires in 5 minutes.</div>
+            </div>
+            <button id="submit2" class="btn" type="submit">Confirm</button>
+            <button id="cancel" class="btn btn-secondary" type="button">Cancel</button>
+        </form>
+    </section>
+
+    <section id="done" class="card" hidden>
+        <h2 id="doneTitle"></h2>
+        <p id="doneText"></p>
+        <a class="btn" href="dashboard.html">Dashboard</a>
+        <a class="btn btn-secondary" href="history.html">View history</a>
+        <a class="btn btn-secondary" href="cash.html">Another transaction</a>
+    </section>
+</main>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script>
+    (async function () {
+        const session = requireAuth();
+        if (!session) return;
+        renderNav("cash.html");
+
+        const msg = $("msg");
+        const defaultOtpHint = $("otpHint").textContent;
+        let accounts = [];
+        let pending = null;
+        let kind = "deposit";
+        let unconfirmed = false;
+
+        try {
+            accounts = await Api.listAccounts();
+        } catch (err) {
+            showMessage(msg, err.message, "error");
+            return;
+        }
+
+        const accountSel = $("account");
+        if (accounts.length === 0) {
+            showMessage(msg, "You need an account first. Open one on the dashboard.", "error");
+            $("submit1").disabled = true;
+        }
+        accounts.forEach(function (a) {
+            const opt = document.createElement("option");
+            opt.value = a.accountNumber;
+            opt.textContent = a.accountNumber + " (" + formatMoney(a.balance, a.currency) + ")";
+            accountSel.appendChild(opt);
+        });
+
+        $("form1").addEventListener("submit", async function (e) {
+            e.preventDefault();
+            hideMessage(msg);
+
+            kind = $("kind").value;
+            const accountNumber = accountSel.value;
+            const amountText = $("amount").value.trim();
+
+            if (!accountNumber) return showMessage(msg, "Choose an account", "error");
+            if (!/^\d+(\.\d{1,2})?$/.test(amountText) || Number(amountText) <= 0) {
+                return showMessage(msg, "Enter a valid amount greater than 0 (max 2 decimals)", "error");
+            }
+            if (Number(amountText) > 1000000) {
+                return showMessage(msg, "The maximum amount is 1,000,000.00", "error");
+            }
+            const amount = Number(amountText);
+
+            const btn = $("submit1");
+            setBusy(btn, true, "Sending OTP...");
+            try {
+                const payload = { accountNumber: accountNumber, amount: amount };
+                const res = kind === "deposit"
+                    ? await Api.initiateDeposit(payload)
+                    : await Api.initiateWithdrawal(payload);
+
+                const source = accounts.find(function (a) { return a.accountNumber === accountNumber; });
+                const cur = source ? source.currency : "";
+                pending = res;
+                unconfirmed = false;
+                $("otpHint").textContent = defaultOtpHint;
+                $("otp").value = "";
+
+                $("sKind").textContent = kind === "deposit" ? "Deposit" : "Withdrawal";
+                $("sAccount").textContent = accountNumber;
+                $("sAmount").textContent = formatMoney(amount, cur);
+                $("sFee").textContent = formatMoney(res.fee, cur);
+                $("sTotalLabel").textContent = kind === "deposit"
+                    ? "Credited to account" : "Debited from account";
+                $("sTotal").textContent = formatMoney(res.totalDebit, cur);
+
+                $("step1").hidden = true;
+                $("step2").hidden = false;
+                if (res.message) showMessage(msg, res.message, "info");
+                $("otp").focus();
+            } catch (err) {
+                showMessage(msg, err.message, "error");
+            }
+            setBusy(btn, false);
+        });
+
+        $("form2").addEventListener("submit", async function (e) {
+            e.preventDefault();
+            hideMessage(msg);
+
+            const otp = $("otp").value.trim();
+            if (otp && !/^\d{6}$/.test(otp)) {
+                return showMessage(msg, "OTP must be exactly 6 digits", "error");
+            }
+            if (!otp && !unconfirmed) {
+                return showMessage(msg, "Enter the 6-digit OTP", "error");
+            }
+
+            const btn = $("submit2");
+            setBusy(btn, true, "Confirming...");
+            try {
+                const res = await Api.confirmTransfer(pending.transferId, otp);
+                $("step2").hidden = true;
+                hideMessage(msg);
+                $("done").hidden = false;
+                if (res.status === "SUCCESS") {
+                    $("doneTitle").textContent = kind === "deposit" ? "Deposit successful" : "Withdrawal successful";
+                    $("doneText").textContent = "Reference: " + res.transferId + ". A confirmation email has been sent.";
+                } else {
+                    $("doneTitle").textContent = "Not completed";
+                    $("doneText").textContent = res.message || "The transaction could not be completed.";
+                }
+            } catch (err) {
+                // The OTP was accepted but the bank has not confirmed yet: retrying is safe and needs no new OTP.
+                if (err.message && err.message.indexOf("could not confirm") !== -1) {
+                    unconfirmed = true;
+                    $("otpHint").textContent = "Your OTP was accepted. Press Confirm again to finish. No new OTP is needed.";
+                }
+                showMessage(msg, err.message, "error");
+                setBusy(btn, false);
+            }
+        });
+
+        $("cancel").addEventListener("click", function () {
+            if (unconfirmed) {
+                // The transaction may already have been posted. Check its status in History.
+                window.location.href = "history.html";
+                return;
+            }
+            pending = null;
+            $("otp").value = "";
+            $("step2").hidden = true;
+            $("step1").hidden = false;
+            hideMessage(msg);
+        });
+    })();
+</script>
+</body>
+</html>
