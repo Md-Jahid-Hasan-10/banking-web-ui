@@ -20,6 +20,7 @@
                     <option value="deposit">Deposit money</option>
                     <option value="withdraw">Withdraw money</option>
                 </select>
+                <div id="kindHint" class="hint">Deposits are instant and need no OTP.</div>
             </div>
             <div class="form-group">
                 <label for="account">Account</label>
@@ -30,12 +31,12 @@
                 <input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
                 <div class="hint">Up to 1,000,000.00 with at most 2 decimals. No fee.</div>
             </div>
-            <button id="submit1" class="btn" type="submit">Continue</button>
+            <button id="submit1" class="btn" type="submit">Deposit</button>
         </form>
     </section>
 
     <section id="step2" class="card" hidden>
-        <h2>Confirm</h2>
+        <h2 id="step2Title">Confirm</h2>
         <div class="summary">
             <div><span class="label">Action</span><span id="sKind"></span></div>
             <div><span class="label">Account</span><span id="sAccount"></span></div>
@@ -44,11 +45,12 @@
             <div><strong id="sTotalLabel"></strong><strong id="sTotal"></strong></div>
         </div>
         <form id="form2" novalidate>
-            <div class="form-group">
+            <div id="otpGroup" class="form-group">
                 <label for="otp">One-time password</label>
                 <input id="otp" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 digits">
                 <div id="otpHint" class="hint">We sent a 6-digit code to your email. It expires in 5 minutes.</div>
             </div>
+            <div id="retryHint" class="hint" hidden></div>
             <button id="submit2" class="btn" type="submit">Confirm</button>
             <button id="cancel" class="btn btn-secondary" type="button">Cancel</button>
         </form>
@@ -78,6 +80,10 @@
         let pending = null;
         let kind = "deposit";
         let unconfirmed = false;
+        // Synchronous guards: set BEFORE any await, so a second click or a
+        // second Enter press can never start a second request.
+        let submitting1 = false;
+        let submitting2 = false;
 
         try {
             accounts = await Api.listAccounts();
@@ -98,8 +104,38 @@
             accountSel.appendChild(opt);
         });
 
+        function updateKindUi() {
+            const isDeposit = $("kind").value === "deposit";
+            $("kindHint").textContent = isDeposit
+                ? "Deposits are instant and need no OTP."
+                : "Withdrawals need a one-time password sent to your email.";
+            $("submit1").textContent = isDeposit ? "Deposit" : "Continue";
+        }
+        $("kind").addEventListener("change", updateKindUi);
+        updateKindUi();
+
+        function showDone(title, text) {
+            $("step1").hidden = true;
+            $("step2").hidden = true;
+            hideMessage(msg);
+            $("doneTitle").textContent = title;
+            $("doneText").textContent = text;
+            $("done").hidden = false;
+        }
+
+        function fillSummary(res, accountNumber, amount, cur) {
+            $("sKind").textContent = kind === "deposit" ? "Deposit" : "Withdrawal";
+            $("sAccount").textContent = accountNumber;
+            $("sAmount").textContent = formatMoney(amount, cur);
+            $("sFee").textContent = formatMoney(res.fee, cur);
+            $("sTotalLabel").textContent = kind === "deposit"
+                ? "Credited to account" : "Debited from account";
+            $("sTotal").textContent = formatMoney(res.totalDebit, cur);
+        }
+
         $("form1").addEventListener("submit", async function (e) {
             e.preventDefault();
+            if (submitting1) return;          // ignore repeated clicks / Enter
             hideMessage(msg);
 
             kind = $("kind").value;
@@ -115,11 +151,15 @@
             }
             const amount = Number(amountText);
 
+            submitting1 = true;
             const btn = $("submit1");
-            setBusy(btn, true, "Sending OTP...");
+            const isDeposit = kind === "deposit";
+            setBusy(btn, true, isDeposit ? "Depositing..." : "Sending OTP...");
+            let finished = false;               // true once we leave step 1 for good
+
             try {
                 const payload = { accountNumber: accountNumber, amount: amount };
-                const res = kind === "deposit"
+                const res = isDeposit
                     ? await Api.initiateDeposit(payload)
                     : await Api.initiateWithdrawal(payload);
 
@@ -127,29 +167,60 @@
                 const cur = source ? source.currency : "";
                 pending = res;
                 unconfirmed = false;
-                $("otpHint").textContent = defaultOtpHint;
-                $("otp").value = "";
 
-                $("sKind").textContent = kind === "deposit" ? "Deposit" : "Withdrawal";
-                $("sAccount").textContent = accountNumber;
-                $("sAmount").textContent = formatMoney(amount, cur);
-                $("sFee").textContent = formatMoney(res.fee, cur);
-                $("sTotalLabel").textContent = kind === "deposit"
-                    ? "Credited to account" : "Debited from account";
-                $("sTotal").textContent = formatMoney(res.totalDebit, cur);
-
-                $("step1").hidden = true;
-                $("step2").hidden = false;
-                if (res.message) showMessage(msg, res.message, "info");
-                $("otp").focus();
+                if (isDeposit) {
+                    // No OTP: the server already posted the deposit.
+                    if (res.status === "SUCCESS") {
+                        finished = true;
+                        showDone("Deposit successful",
+                            "Reference: " + res.transferId + ". A confirmation email has been sent.");
+                    } else if (res.status === "UNCONFIRMED") {
+                        // Bank has not answered yet. Retrying is safe (same reference).
+                        finished = true;
+                        unconfirmed = true;
+                        fillSummary(res, accountNumber, amount, cur);
+                        $("step2Title").textContent = "Deposit not confirmed yet";
+                        $("otpGroup").hidden = true;
+                        $("retryHint").hidden = false;
+                        $("retryHint").textContent =
+                            "We could not confirm the result yet. Press Check again in a moment. Do not start a new deposit.";
+                        $("submit2").textContent = "Check again";
+                        $("step1").hidden = true;
+                        $("step2").hidden = false;
+                    } else {
+                        finished = true;
+                        showDone("Not completed", res.message || "The deposit could not be completed.");
+                    }
+                } else {
+                    // Withdrawal: OTP step as before.
+                    $("step2Title").textContent = "Confirm";
+                    $("otpGroup").hidden = false;
+                    $("retryHint").hidden = true;
+                    $("submit2").textContent = "Confirm";
+                    $("otpHint").textContent = defaultOtpHint;
+                    $("otp").value = "";
+                    fillSummary(res, accountNumber, amount, cur);
+                    $("step1").hidden = true;
+                    $("step2").hidden = false;
+                    finished = true;
+                    if (res.message) showMessage(msg, res.message, "info");
+                    $("otp").focus();
+                }
             } catch (err) {
                 showMessage(msg, err.message, "error");
             }
-            setBusy(btn, false);
+
+            // Only unlock the form if we are still on step 1 (the request failed).
+            // After a success the button stays locked.
+            if (!finished) {
+                setBusy(btn, false);
+                submitting1 = false;
+            }
         });
 
         $("form2").addEventListener("submit", async function (e) {
             e.preventDefault();
+            if (submitting2) return;          // ignore repeated clicks / Enter
             hideMessage(msg);
 
             const otp = $("otp").value.trim();
@@ -160,28 +231,34 @@
                 return showMessage(msg, "Enter the 6-digit OTP", "error");
             }
 
+            submitting2 = true;
             const btn = $("submit2");
             setBusy(btn, true, "Confirming...");
             try {
                 const res = await Api.confirmTransfer(pending.transferId, otp);
-                $("step2").hidden = true;
-                hideMessage(msg);
-                $("done").hidden = false;
                 if (res.status === "SUCCESS") {
-                    $("doneTitle").textContent = kind === "deposit" ? "Deposit successful" : "Withdrawal successful";
-                    $("doneText").textContent = "Reference: " + res.transferId + ". A confirmation email has been sent.";
+                    showDone(kind === "deposit" ? "Deposit successful" : "Withdrawal successful",
+                        "Reference: " + res.transferId + ". A confirmation email has been sent.");
                 } else {
-                    $("doneTitle").textContent = "Not completed";
-                    $("doneText").textContent = res.message || "The transaction could not be completed.";
+                    showDone("Not completed", res.message || "The transaction could not be completed.");
                 }
+                // Stay locked after a final result.
             } catch (err) {
-                // The OTP was accepted but the bank has not confirmed yet: retrying is safe and needs no new OTP.
+                // The OTP was accepted (or none was needed) but the bank has not confirmed yet:
+                // retrying is safe and needs no new OTP.
                 if (err.message && err.message.indexOf("could not confirm") !== -1) {
                     unconfirmed = true;
-                    $("otpHint").textContent = "Your OTP was accepted. Press Confirm again to finish. No new OTP is needed.";
+                    if (kind === "deposit") {
+                        $("retryHint").textContent =
+                            "Still not confirmed. Press Check again in a moment. Do not start a new deposit.";
+                    } else {
+                        $("otpHint").textContent =
+                            "Your OTP was accepted. Press Confirm again to finish. No new OTP is needed.";
+                    }
                 }
                 showMessage(msg, err.message, "error");
                 setBusy(btn, false);
+                submitting2 = false;
             }
         });
 
@@ -196,6 +273,8 @@
             $("step2").hidden = true;
             $("step1").hidden = false;
             hideMessage(msg);
+            submitting1 = false;
+            setBusy($("submit1"), false);
         });
     })();
 </script>
