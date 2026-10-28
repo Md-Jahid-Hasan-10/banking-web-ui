@@ -67,8 +67,9 @@
 
         setBusy(btn, true, "Creating...");
         try {
-          await Api.register({ fullName: fullName, email: email, password: password });
-          window.location.replace("login.html?registered=1");
+          const res = await Api.register({ fullName: fullName, email: email, password: password });
+          $("form").hidden = true;
+          showMessage(msg, (res && res.message) || "Please check your inbox.", "success");
         } catch (err) {
           showMessage(msg, err.message, "error");
           setBusy(btn, false);

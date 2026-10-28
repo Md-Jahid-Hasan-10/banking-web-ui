@@ -123,6 +123,10 @@ const Api = {
     return request("/api/transfers/deposit", { method: "POST", body: payload });
   },
 
+  verifyEmail(token) {
+    return request("/api/auth/verify", { method: "POST", body: { token: token }, auth: false });
+  },
+
   initiateWithdrawal(payload) {
     return request("/api/transfers/withdraw", { method: "POST", body: payload });
   },

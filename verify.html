@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title>Verify email - Banking</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="auth-wrap">
+    <div class="card">
+        <h1>Verify your email</h1>
+        <div id="msg" class="msg" hidden></div>
+        <p id="info">Press the button to confirm your email address.</p>
+        <button id="confirm" class="btn btn-block" type="button">Confirm my email</button>
+        <p class="center hint"><a class="link" href="login.html">Go to login</a></p>
+    </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script>
+    (function () {
+        const msg = $("msg");
+        const btn = $("confirm");
+        const token = new URLSearchParams(window.location.search).get("token");
+
+        // Remove the token from the address bar, so it does not stay in the browser history.
+        window.history.replaceState(null, "", "verify.html");
+
+        if (!token) {
+            showMessage(msg, "This verification link is incomplete. Please use the link from your email.", "error");
+            btn.disabled = true;
+            return;
+        }
+
+        btn.addEventListener("click", async function () {
+            hideMessage(msg);
+            setBusy(btn, true, "Verifying...");
+            try {
+                const res = await Api.verifyEmail(token);
+                $("info").hidden = true;
+                btn.hidden = true;
+                showMessage(msg, (res && res.message) || "Email verified.", "success");
+            } catch (err) {
+                showMessage(msg, err.message, "error");
+                setBusy(btn, false);
+            }
+        });
+    })();
+</script>
+</body>
+</html>
