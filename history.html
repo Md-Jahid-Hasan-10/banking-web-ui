@@ -7,93 +7,123 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <nav id="nav" class="nav"></nav>
-  <main class="container">
-    <h1>Transfer history</h1>
-    <div id="msg" class="msg" hidden></div>
-    <section class="card">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th><th>Reference</th><th>Type</th><th>From</th><th>To</th>
-              <th>Amount</th><th>Fee</th><th>Status</th><th></th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-      <p id="empty" class="hint" hidden>No transfers yet.</p>
-    </section>
-  </main>
+<nav id="nav" class="nav"></nav>
+<main class="container">
+  <h1>History</h1>
+  <div id="msg" class="msg" hidden></div>
+  <section class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+        <tr>
+          <th>Date</th><th>Reference</th><th>Type</th><th>From</th><th>To</th>
+          <th>Amount</th><th>Fee</th><th>Status</th><th></th>
+        </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p id="empty" class="hint" hidden>Nothing here yet.</p>
+  </section>
+</main>
 
-  <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/ui.js"></script>
-  <script>
-    (async function () {
-      if (!requireAuth()) return;
-      renderNav("history.html");
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script>
+  (async function () {
+    if (!requireAuth()) return;
+    renderNav("history.html");
 
-      const msg = $("msg");
-      const body = $("rows");
+    const REFRESH_MS = 3000;
+    const MAX_REFRESHES = 40;
 
-      async function retry(id, btn) {
-        hideMessage(msg);
-        setBusy(btn, true, "Retrying...");
-        try {
-          const res = await Api.confirmTransfer(id);
-          const ok = res.status === "SUCCESS";
-          showMessage(msg, ok ? "Transfer " + id + " completed" : (res.message || "Transfer not completed"),
-            ok ? "success" : "error");
-          await load();
-        } catch (err) {
-          showMessage(msg, err.message, "error");
-          setBusy(btn, false);
-        }
+    // Requests that can still be followed on the transfer or cash page.
+    const OPENABLE = ["VALIDATING", "FEE_PENDING", "OTP_PENDING", "AWAITING_OTP", "WITHDRAWING",
+      "DEPOSITING", "REVERSING", "RECONCILIATION_REQUIRED"];
+    // Requests the server is working on right now, so this page refreshes itself.
+    const MOVING = ["VALIDATING", "FEE_PENDING", "OTP_PENDING", "WITHDRAWING", "DEPOSITING", "REVERSING"];
+
+    const msg = $("msg");
+    const body = $("rows");
+    let refreshes = 0;
+    let timer = null;
+
+    function openLink(t) {
+      const page = (t.type || "TRANSFER") === "TRANSFER" ? "transfer.html" : "cash.html";
+      const a = makeEl("a", "btn btn-secondary btn-small", "Open");
+      a.href = page + "?id=" + encodeURIComponent(t.transferId);
+      return a;
+    }
+
+    // Only for transfers of the old synchronous flow that ended UNCONFIRMED.
+    async function retry(id, btn) {
+      hideMessage(msg);
+      setBusy(btn, true, "Retrying...");
+      try {
+        const res = await Api.confirmTransfer(id);
+        const ok = res.status === "SUCCESS" || res.status === "COMPLETED";
+        showMessage(msg, ok ? "Request " + id + " completed" : (res.message || "Not completed"),
+                ok ? "success" : "error");
+        await load();
+      } catch (err) {
+        showMessage(msg, err.message, "error");
+        setBusy(btn, false);
       }
+    }
 
-      async function load() {
-        try {
-          const items = await Api.listTransfers();
-          body.textContent = "";
-          $("empty").hidden = Boolean(items && items.length > 0);
+    function render(items) {
+      body.textContent = "";
+      $("empty").hidden = items.length > 0;
 
-          (items || []).forEach(function (t) {
-            const tr = document.createElement("tr");
-            [
-              formatDate(t.createdAt),
-              t.transferId,
-              t.type || "TRANSFER",
-              t.fromAccountNumber,
-              t.toAccountNumber,
-              formatMoney(t.amount),
-              formatMoney(t.fee)
-            ].forEach(function (value) { tr.appendChild(makeEl("td", "", value)); });
+      items.forEach(function (t) {
+        const tr = document.createElement("tr");
+        [
+          formatDate(t.createdAt),
+          t.transferId,
+          typeLabel(t.type),
+          t.fromAccountNumber,
+          t.toAccountNumber,
+          formatMoney(t.amount),
+          formatMoney(t.fee)
+        ].forEach(function (value) { tr.appendChild(makeEl("td", "", value)); });
 
-            const status = makeEl("td");
-            status.appendChild(makeEl("span", "status " + (t.status || ""), t.status || ""));
-            tr.appendChild(status);
+        const status = makeEl("td");
+        status.appendChild(makeEl("span", "status " + (t.status || ""), statusLabel(t.status)));
+        tr.appendChild(status);
 
-            const action = makeEl("td");
-            if (t.status === "UNCONFIRMED") {
-              const btn = makeEl("button", "btn btn-small", "Retry");
-              btn.addEventListener("click", function () { retry(t.transferId, btn); });
-              action.appendChild(btn);
-            } else if (t.status === "PENDING_OTP") {
-              action.appendChild(makeEl("span", "hint", "Waiting for OTP"));
-            }
-            tr.appendChild(action);
-
-            body.appendChild(tr);
-          });
-        } catch (err) {
-          showMessage(msg, err.message, "error");
+        const action = makeEl("td");
+        if (OPENABLE.indexOf(t.status) !== -1) {
+          action.appendChild(openLink(t));
+        } else if (t.status === "UNCONFIRMED") {
+          const btn = makeEl("button", "btn btn-small", "Retry");
+          btn.addEventListener("click", function () { retry(t.transferId, btn); });
+          action.appendChild(btn);
         }
-      }
+        tr.appendChild(action);
 
-      load();
-    })();
-  </script>
+        body.appendChild(tr);
+      });
+    }
+
+    async function load() {
+      clearTimeout(timer);
+      try {
+        const items = (await Api.listTransfers()) || [];
+        render(items);
+
+        const moving = items.some(function (t) { return MOVING.indexOf(t.status) !== -1; });
+        if (moving && refreshes < MAX_REFRESHES) {
+          refreshes++;
+          timer = setTimeout(load, REFRESH_MS);
+        }
+      } catch (err) {
+        showMessage(msg, err.message, "error");
+      }
+    }
+
+    load();
+  })();
+</script>
 </body>
 </html>

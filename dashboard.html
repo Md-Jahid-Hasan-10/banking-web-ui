@@ -7,78 +7,133 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <nav id="nav" class="nav"></nav>
-  <main class="container">
-    <h1 id="welcome">Dashboard</h1>
-    <div id="msg" class="msg" hidden></div>
+<nav id="nav" class="nav"></nav>
+<main class="container">
+  <h1 id="welcome">Dashboard</h1>
+  <div id="msg" class="msg" hidden></div>
 
-    <section class="card">
-      <div class="row-between">
-        <h2>My accounts</h2>
-        <div class="actions">
-          <select id="accountType" aria-label="Account type">
-            <option value="SAVINGS">Savings</option>
-            <option value="CURRENT">Current</option>
-          </select>
-          <button id="createBtn" class="btn" type="button">Open account</button>
-        </div>
+  <section class="card">
+    <div class="row-between">
+      <h2>My accounts</h2>
+      <div class="actions">
+        <select id="accountType" aria-label="Account type">
+          <option value="SAVINGS">Savings</option>
+          <option value="CURRENT">Current</option>
+        </select>
+        <button id="createBtn" class="btn" type="button">Open account</button>
       </div>
-      <div id="accounts" class="accounts"></div>
-    </section>
-  </main>
+    </div>
+    <div id="accounts" class="accounts"></div>
+  </section>
+</main>
 
-  <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/ui.js"></script>
-  <script>
-    (async function () {
-      const session = requireAuth();
-      if (!session) return;
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script>
+  (async function () {
+    const session = requireAuth();
+    if (!session) return;
 
-      renderNav("dashboard.html");
-      $("welcome").textContent = "Welcome, " + session.fullName;
+    renderNav("dashboard.html");
+    $("welcome").textContent = "Welcome, " + session.fullName;
 
-      const msg = $("msg");
-      const list = $("accounts");
-      const createBtn = $("createBtn");
+    const POLL_MS = 1500;
+    const MAX_POLLS = 40;
 
-      function render(accounts) {
-        list.textContent = "";
-        if (!accounts || accounts.length === 0) {
-          list.appendChild(makeEl("p", "hint", "You have no accounts yet. Open one above."));
-          return;
-        }
-        accounts.forEach(function (a) {
-          const card = makeEl("div", "account-card");
-          card.appendChild(makeEl("div", "type", a.accountType));
-          card.appendChild(makeEl("div", "number", a.accountNumber));
-          card.appendChild(makeEl("div", "balance", formatMoney(a.balance, a.currency)));
-          list.appendChild(card);
-        });
+    const msg = $("msg");
+    const list = $("accounts");
+    const createBtn = $("createBtn");
+
+    let pollsLeft = MAX_POLLS;
+    let timer = null;
+    const waiting = new Set();
+
+    function render(accounts) {
+      list.textContent = "";
+      if (!accounts || accounts.length === 0) {
+        list.appendChild(makeEl("p", "hint", "You have no accounts yet. Open one above."));
+        return;
       }
+      accounts.forEach(function (a) {
+        const card = makeEl("div", "account-card");
+        card.appendChild(makeEl("div", "type", a.accountType));
+        card.appendChild(makeEl("div", "number", a.accountNumber));
 
-      async function load() {
-        try {
-          render(await Api.listAccounts());
-        } catch (err) {
-          showMessage(msg, err.message, "error");
+        if (a.status === "PENDING") {
+          const pending = makeEl("div", "balance pending");
+          pending.appendChild(makeEl("span", "spinner"));
+          pending.appendChild(makeEl("span", "", "Opening your account..."));
+          card.appendChild(pending);
+        } else {
+          const balance = makeEl("div", "balance", formatMoney(a.balance, a.currency));
+          if (a.status === "BLOCKED") {
+            balance.appendChild(makeEl("span", "badge", "Blocked"));
+          }
+          card.appendChild(balance);
         }
-      }
-
-      createBtn.addEventListener("click", async function () {
-        hideMessage(msg);
-        setBusy(createBtn, true, "Opening...");
-        try {
-          await Api.createAccount($("accountType").value);
-          await load();
-        } catch (err) {
-          showMessage(msg, err.message, "error");
-        }
-        setBusy(createBtn, false);
+        list.appendChild(card);
       });
+    }
 
-      load();
-    })();
-  </script>
+    // An account that was PENDING and is no longer listed failed to open.
+    async function reportVanished(accounts) {
+      const present = new Set(accounts.map(function (a) { return a.accountNumber; }));
+      for (const number of Array.from(waiting)) {
+        if (present.has(number)) continue;
+        waiting.delete(number);
+        try {
+          const account = await Api.getAccount(number);
+          if (account.status === "OPENING_FAILED") {
+            showMessage(msg, "The new account could not be opened. "
+                    + (account.reason || "Please try again."), "error");
+          }
+        } catch (err) {
+          // Nothing more to say. The account is simply not in the list.
+        }
+      }
+    }
+
+    async function load() {
+      clearTimeout(timer);
+      try {
+        const accounts = await Api.listAccounts();
+        render(accounts);
+        await reportVanished(accounts);
+
+        accounts.forEach(function (a) {
+          if (a.status === "PENDING") waiting.add(a.accountNumber);
+          else waiting.delete(a.accountNumber);
+        });
+
+        const hasPending = accounts.some(function (a) { return a.status === "PENDING"; });
+        if (hasPending && pollsLeft > 0) {
+          pollsLeft--;
+          timer = setTimeout(load, POLL_MS);
+        } else if (hasPending) {
+          showMessage(msg, "Your new account is still being opened. Refresh this page in a moment.", "info");
+        }
+      } catch (err) {
+        showMessage(msg, err.message, "error");
+      }
+    }
+
+    createBtn.addEventListener("click", async function () {
+      hideMessage(msg);
+      setBusy(createBtn, true, "Opening...");
+      try {
+        const account = await Api.createAccount($("accountType").value);
+        waiting.add(account.accountNumber);
+        pollsLeft = MAX_POLLS;
+        await load();
+      } catch (err) {
+        showMessage(msg, err.message, "error");
+      }
+      setBusy(createBtn, false);
+    });
+
+    load();
+  })();
+</script>
 </body>
 </html>

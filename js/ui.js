@@ -45,6 +45,35 @@ function makeEl(tag, className, text) {
   return e;
 }
 
+const STATUS_LABELS = {
+  VALIDATING: "Checking",
+  FEE_PENDING: "Calculating fee",
+  OTP_PENDING: "Sending code",
+  AWAITING_OTP: "Waiting for code",
+  WITHDRAWING: "Moving money",
+  DEPOSITING: "Moving money",
+  REVERSING: "Returning money",
+  COMPLETED: "Completed",
+  SUCCESS: "Completed",
+  FAILED: "Failed",
+  REVERSED: "Reversed",
+  EXPIRED: "Expired",
+  RECONCILIATION_REQUIRED: "Under review",
+  PENDING_OTP: "Waiting for code",
+  PROCESSING: "Processing",
+  UNCONFIRMED: "Unconfirmed"
+};
+
+function statusLabel(status) {
+  return STATUS_LABELS[status] || status || "";
+}
+
+function typeLabel(type) {
+  if (type === "DEPOSIT") return "Deposit";
+  if (type === "WITHDRAWAL") return "Withdrawal";
+  return "Transfer";
+}
+
 function renderNav(active) {
   const nav = $("nav");
   nav.textContent = "";

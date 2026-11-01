@@ -7,203 +7,160 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <nav id="nav" class="nav"></nav>
-  <main class="container">
-    <h1>Transfer money</h1>
-    <div id="msg" class="msg" hidden></div>
+<nav id="nav" class="nav"></nav>
+<main class="container">
+  <h1>Transfer money</h1>
+  <div id="msg" class="msg" hidden></div>
 
-    <section id="step1" class="card">
-      <form id="form1" novalidate>
-        <div class="form-group">
-          <label for="from">From account</label>
-          <select id="from"></select>
-        </div>
-        <div class="form-group">
-          <label for="to">To account number</label>
-          <input id="to" type="text" maxlength="50" autocomplete="off" placeholder="e.g. ACC-12345678">
-          <div id="toHint" class="hint">Transfers between your own accounts are free. Other accounts have a fee.</div>
-        </div>
-        <div class="form-group">
-          <label for="amount">Amount</label>
-          <input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
-        </div>
-        <button id="submit1" class="btn" type="submit">Continue</button>
-      </form>
-    </section>
-
-    <section id="step2" class="card" hidden>
-      <h2>Confirm transfer</h2>
-      <div class="summary">
-        <div><span class="label">From</span><span id="sFrom"></span></div>
-        <div><span class="label">To</span><span id="sTo"></span></div>
-        <div><span class="label">Amount</span><span id="sAmount"></span></div>
-        <div><span class="label">Fee</span><span id="sFee"></span></div>
-        <div><strong>Total debit</strong><strong id="sTotal"></strong></div>
+  <section id="formCard" class="card">
+    <form id="form1" novalidate>
+      <div class="form-group">
+        <label for="from">From account</label>
+        <select id="from"></select>
       </div>
-      <form id="form2" novalidate>
-        <div class="form-group">
-          <label for="otp">One-time password</label>
-          <input id="otp" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 digits">
-          <div id="otpHint" class="hint">We sent a 6-digit code to your email. It expires in 5 minutes.</div>
-        </div>
-        <button id="submit2" class="btn" type="submit">Confirm transfer</button>
-        <button id="cancel" class="btn btn-secondary" type="button">Cancel</button>
-      </form>
-    </section>
+      <div class="form-group">
+        <label for="to">To account number</label>
+        <input id="to" type="text" maxlength="50" autocomplete="off" list="ownAccounts"
+               placeholder="e.g. ACC-12345678">
+        <datalist id="ownAccounts"></datalist>
+        <div id="toHint" class="hint">Transfers between your own accounts are free. Other accounts have a fee.</div>
+      </div>
+      <div class="form-group">
+        <label for="amount">Amount</label>
+        <input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+      </div>
+      <button id="submit1" class="btn" type="submit">Continue</button>
+    </form>
+  </section>
 
-    <section id="done" class="card" hidden>
-      <h2 id="doneTitle"></h2>
-      <p id="doneText"></p>
-      <a class="btn" href="history.html">View history</a>
-      <a class="btn btn-secondary" href="transfer.html">New transfer</a>
-    </section>
-  </main>
+  <section id="flow" hidden></section>
+</main>
 
-  <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/ui.js"></script>
-  <script>
-    (async function () {
-      const session = requireAuth();
-      if (!session) return;
-      renderNav("transfer.html");
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/flow.js"></script>
+<script>
+  (async function () {
+    const session = requireAuth();
+    if (!session) return;
+    renderNav("transfer.html");
 
-      const msg = $("msg");
-      const defaultOtpHint = $("otpHint").textContent;
-      let accounts = [];
-      let pending = null;
-      let unconfirmed = false;
+    const msg = $("msg");
+    const formCard = $("formCard");
+    const fromSel = $("from");
+    const defaultHint = $("toHint").textContent;
+    let accounts = [];
 
-      try {
-        accounts = await Api.listAccounts();
-      } catch (err) {
-        showMessage(msg, err.message, "error");
-        return;
-      }
+    async function loadAccounts() {
+      const all = await Api.listAccounts();
+      accounts = all.filter(function (a) { return !a.status || a.status === "ACTIVE"; });
 
-      const fromSel = $("from");
-      if (accounts.length === 0) {
-        showMessage(msg, "You need an account first. Open one on the dashboard.", "error");
-        $("submit1").disabled = true;
-      }
+      const previous = fromSel.value;
+      fromSel.textContent = "";
+      $("ownAccounts").textContent = "";
       accounts.forEach(function (a) {
         const opt = document.createElement("option");
         opt.value = a.accountNumber;
         opt.textContent = a.accountNumber + " (" + formatMoney(a.balance, a.currency) + ")";
         fromSel.appendChild(opt);
-      });
 
-      // Only a hint. The server decides the real fee.
-      $("to").addEventListener("input", function () {
-        const v = $("to").value.trim();
-        const hint = $("toHint");
-        if (!v) {
-          hint.textContent = "Transfers between your own accounts are free. Other accounts have a fee.";
-        } else if (accounts.some(function (a) { return a.accountNumber === v; })) {
-          hint.textContent = "Your own account: no fee expected.";
+        const suggestion = document.createElement("option");
+        suggestion.value = a.accountNumber;
+        $("ownAccounts").appendChild(suggestion);
+      });
+      if (previous) fromSel.value = previous;
+
+      $("submit1").disabled = accounts.length === 0;
+      if (accounts.length === 0) {
+        showMessage(msg, "You need an active account first. Open one on the dashboard.", "error");
+      }
+    }
+
+    function showForm() {
+      flow.hide();
+      formCard.hidden = false;
+      window.history.replaceState(null, "", "transfer.html");
+      hideMessage(msg);
+      $("amount").value = "";
+      loadAccounts().catch(function (err) { showMessage(msg, err.message, "error"); });
+    }
+
+    const flow = TxFlow.create($("flow"), {
+      onNew: showForm,
+      onFinished: function () {
+        loadAccounts().catch(function () { /* the balances refresh when the form is shown again */ });
+      }
+    });
+
+    // Only a hint. The server decides the real fee.
+    $("to").addEventListener("input", function () {
+      const v = $("to").value.trim();
+      const hint = $("toHint");
+      if (!v) {
+        hint.textContent = defaultHint;
+      } else if (accounts.some(function (a) { return a.accountNumber === v; })) {
+        hint.textContent = "Your own account: no fee expected.";
+      } else {
+        hint.textContent = "Another account: a fee will apply.";
+      }
+    });
+
+    $("form1").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      hideMessage(msg);
+
+      const fromAccountNumber = fromSel.value;
+      const toAccountNumber = $("to").value.trim();
+      const amountText = $("amount").value.trim();
+
+      if (!fromAccountNumber) return showMessage(msg, "Choose the account to send from", "error");
+      if (!toAccountNumber) return showMessage(msg, "Enter the destination account number", "error");
+      if (toAccountNumber === fromAccountNumber) {
+        return showMessage(msg, "Choose a different destination account", "error");
+      }
+      if (!/^\d+(\.\d{1,2})?$/.test(amountText) || Number(amountText) <= 0) {
+        return showMessage(msg, "Enter a valid amount greater than 0 (max 2 decimals)", "error");
+      }
+      const amount = Number(amountText);
+
+      const btn = $("submit1");
+      setBusy(btn, true, "Sending...");
+      try {
+        const tx = await Api.initiateTransfer({
+          fromAccountNumber: fromAccountNumber,
+          toAccountNumber: toAccountNumber,
+          amount: amount
+        });
+
+        if (tx.status !== "VALIDATING") {
+          showMessage(msg, "The server still runs the old synchronous flow. "
+                  + "Start fund-transfer-service with TRANSFER_SAGA_ENABLED=true.", "error");
         } else {
-          hint.textContent = "Another account: a fee will apply.";
+          formCard.hidden = true;
+          window.history.replaceState(null, "", "transfer.html?id=" + encodeURIComponent(tx.transferId));
+          flow.track(tx.transferId);
         }
-      });
+      } catch (err) {
+        showMessage(msg, err.message, "error");
+      }
+      setBusy(btn, false);
+    });
 
-      $("form1").addEventListener("submit", async function (e) {
-        e.preventDefault();
-        hideMessage(msg);
-
-        const fromAccountNumber = fromSel.value;
-        const toAccountNumber = $("to").value.trim();
-        const amountText = $("amount").value.trim();
-
-        if (!toAccountNumber) return showMessage(msg, "Enter the destination account number", "error");
-        if (toAccountNumber === fromAccountNumber) {
-          return showMessage(msg, "Choose a different destination account", "error");
-        }
-        if (!/^\d+(\.\d{1,2})?$/.test(amountText) || Number(amountText) <= 0) {
-          return showMessage(msg, "Enter a valid amount greater than 0 (max 2 decimals)", "error");
-        }
-        const amount = Number(amountText);
-
-        const btn = $("submit1");
-        setBusy(btn, true, "Sending OTP...");
-        try {
-          const res = await Api.initiateTransfer({
-            fromAccountNumber: fromAccountNumber,
-            toAccountNumber: toAccountNumber,
-            amount: amount
-          });
-          const source = accounts.find(function (a) { return a.accountNumber === fromAccountNumber; });
-          const cur = source ? source.currency : "";
-          pending = res;
-          unconfirmed = false;
-          $("otpHint").textContent = defaultOtpHint;
-          $("otp").value = "";
-
-          $("sFrom").textContent = fromAccountNumber;
-          $("sTo").textContent = toAccountNumber;
-          $("sAmount").textContent = formatMoney(amount, cur);
-          $("sFee").textContent = formatMoney(res.fee, cur);
-          $("sTotal").textContent = formatMoney(res.totalDebit, cur);
-
-          $("step1").hidden = true;
-          $("step2").hidden = false;
-          if (res.message) showMessage(msg, res.message, "info");
-          $("otp").focus();
-        } catch (err) {
-          showMessage(msg, err.message, "error");
-        }
-        setBusy(btn, false);
-      });
-
-      $("form2").addEventListener("submit", async function (e) {
-        e.preventDefault();
-        hideMessage(msg);
-
-        const otp = $("otp").value.trim();
-        if (otp && !/^\d{6}$/.test(otp)) {
-          return showMessage(msg, "OTP must be exactly 6 digits", "error");
-        }
-        if (!otp && !unconfirmed) {
-          return showMessage(msg, "Enter the 6-digit OTP", "error");
-        }
-
-        const btn = $("submit2");
-        setBusy(btn, true, "Confirming...");
-        try {
-          const res = await Api.confirmTransfer(pending.transferId, otp);
-          $("step2").hidden = true;
-          hideMessage(msg);
-          $("done").hidden = false;
-          if (res.status === "SUCCESS") {
-            $("doneTitle").textContent = "Transfer successful";
-            $("doneText").textContent = "Reference: " + res.transferId + ". A confirmation email has been sent.";
-          } else {
-            $("doneTitle").textContent = "Transfer not completed";
-            $("doneText").textContent = res.message || "The transfer could not be completed.";
-          }
-        } catch (err) {
-          // The OTP was accepted but the bank has not confirmed yet: retrying is safe and needs no new OTP.
-          if (err.message && err.message.indexOf("could not confirm") !== -1) {
-            unconfirmed = true;
-            $("otpHint").textContent = "Your OTP was accepted. Press Confirm again to finish. No new OTP is needed.";
-          }
-          showMessage(msg, err.message, "error");
-          setBusy(btn, false);
-        }
-      });
-
-      $("cancel").addEventListener("click", function () {
-        if (unconfirmed) {
-          // The transfer may already have been paid. Check its status in History.
-          window.location.href = "history.html";
-          return;
-        }
-        pending = null;
-        $("otp").value = "";
-        $("step2").hidden = true;
-        $("step1").hidden = false;
-        hideMessage(msg);
-      });
-    })();
-  </script>
+    // A reload (or a link from History) resumes a running request.
+    const resumeId = new URLSearchParams(window.location.search).get("id");
+    if (resumeId) {
+      formCard.hidden = true;
+      flow.track(resumeId);
+      loadAccounts().catch(function () { /* not needed to follow the request */ });
+    } else {
+      try {
+        await loadAccounts();
+      } catch (err) {
+        showMessage(msg, err.message, "error");
+      }
+    }
+  })();
+</script>
 </body>
 </html>

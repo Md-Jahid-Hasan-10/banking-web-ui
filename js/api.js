@@ -115,32 +115,42 @@ const Api = {
     return request("/api/accounts");
   },
 
+  getAccount(accountNumber) {
+    return request("/api/accounts/" + encodeURIComponent(accountNumber));
+  },
+
+  /** Answers 202: the account is PENDING until the ledger has created it. */
   createAccount(accountType) {
     return request("/api/accounts", { method: "POST", body: { accountType: accountType } });
+  },
+
+  /** The three calls below answer 202 with status VALIDATING. Follow them with getTransfer. */
+  initiateTransfer(payload) {
+    return request("/api/transfers", { method: "POST", body: payload });
   },
 
   initiateDeposit(payload) {
     return request("/api/transfers/deposit", { method: "POST", body: payload });
   },
 
-  verifyEmail(token) {
-    return request("/api/auth/verify", { method: "POST", body: { token: token }, auth: false });
-  },
-
   initiateWithdrawal(payload) {
     return request("/api/transfers/withdraw", { method: "POST", body: payload });
   },
 
-  initiateTransfer(payload) {
-    return request("/api/transfers", { method: "POST", body: payload });
+  getTransfer(transferId) {
+    return request("/api/transfers/" + encodeURIComponent(transferId));
   },
 
-  // otp may be omitted to retry a transfer that is UNCONFIRMED (the OTP was already accepted).
+  // otp may be omitted to retry a transfer of the old flow that is UNCONFIRMED.
   confirmTransfer(transferId, otp) {
     return request("/api/transfers/" + encodeURIComponent(transferId) + "/confirm", {
       method: "POST",
       body: otp ? { otp: otp } : {}
     });
+  },
+
+  resendOtp(transferId) {
+    return request("/api/transfers/" + encodeURIComponent(transferId) + "/resend-otp", { method: "POST" });
   },
 
   listTransfers() {

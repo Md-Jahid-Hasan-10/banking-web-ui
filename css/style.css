@@ -135,3 +135,77 @@ th { color: var(--muted); font-weight: 600; }
 
 .center { text-align: center; }
 a.link { color: var(--primary); }
+/* ---- ED9: saga screens ---- */
+:root {
+  --warn-bg: #fef3c7;
+  --warn-text: #92400e;
+  --muted-bg: #e2e8f0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --warn-bg: #451a03;
+    --warn-text: #fde68a;
+    --muted-bg: #334155;
+  }
+}
+
+.msg.warning { background: var(--warn-bg); color: var(--warn-text); }
+.msg.muted { background: var(--muted-bg); color: var(--text); }
+.result-banner strong { display: block; font-size: 1.1rem; margin-bottom: 0.2rem; }
+
+.status.COMPLETED, .status.SUCCESS { color: var(--success-text); }
+.status.FAILED { color: var(--error-text); }
+.status.REVERSED, .status.RECONCILIATION_REQUIRED { color: var(--warn-text); }
+.status.EXPIRED { color: var(--muted); }
+
+.progress-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; }
+.progress-message { margin: 0; font-size: 1.05rem; }
+
+.spinner {
+  display: inline-block;
+  flex: none;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .timeline li.current .step-icon { animation-duration: 3s; }
+}
+
+.timeline { list-style: none; margin: 0 0 1rem; padding: 0; }
+.timeline li { display: flex; align-items: center; gap: 0.6rem; padding: 0.25rem 0; color: var(--muted); }
+.timeline li.current { color: var(--text); font-weight: 600; }
+.timeline .step-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.timeline li.done .step-icon { color: var(--success-text); font-weight: 700; }
+.timeline li.current .step-icon {
+  border: 2px solid var(--primary);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.button-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+
+.account-card .balance.pending { display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; color: var(--muted); }
+.badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--muted-bg);
+  font-size: 0.75rem;
+}
