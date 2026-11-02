@@ -39,10 +39,11 @@
     const MAX_REFRESHES = 40;
 
     // Requests that can still be followed on the transfer or cash page.
-    const OPENABLE = ["VALIDATING", "FEE_PENDING", "OTP_PENDING", "AWAITING_OTP", "WITHDRAWING",
-      "DEPOSITING", "REVERSING", "RECONCILIATION_REQUIRED"];
+    const OPENABLE = ["VALIDATING", "FEE_PENDING", "BALANCE_CHECKING", "OTP_PENDING", "AWAITING_OTP",
+      "WITHDRAWING", "DEPOSITING", "REVERSING", "RECONCILIATION_REQUIRED"];
     // Requests the server is working on right now, so this page refreshes itself.
-    const MOVING = ["VALIDATING", "FEE_PENDING", "OTP_PENDING", "WITHDRAWING", "DEPOSITING", "REVERSING"];
+    const MOVING = ["VALIDATING", "FEE_PENDING", "BALANCE_CHECKING", "OTP_PENDING", "WITHDRAWING",
+      "DEPOSITING", "REVERSING"];
 
     const msg = $("msg");
     const body = $("rows");

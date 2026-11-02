@@ -98,6 +98,15 @@ const Api = {
     return request("/api/auth/register", { method: "POST", body: payload, auth: false });
   },
 
+  /* The token comes from the link in the email, so no session exists yet. */
+  verifyEmail(token) {
+    return request("/api/auth/verify", {
+      method: "POST",
+      body: { token: token },
+      auth: false
+    });
+  },
+
   async login(payload) {
     const d = await request("/api/auth/login", { method: "POST", body: payload, auth: false });
     Session.save({

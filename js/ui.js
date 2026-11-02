@@ -48,6 +48,7 @@ function makeEl(tag, className, text) {
 const STATUS_LABELS = {
   VALIDATING: "Checking",
   FEE_PENDING: "Calculating fee",
+  BALANCE_CHECKING: "Checking balance",
   OTP_PENDING: "Sending code",
   AWAITING_OTP: "Waiting for code",
   WITHDRAWING: "Moving money",

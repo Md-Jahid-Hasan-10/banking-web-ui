@@ -1,0 +1,9 @@
+HELP.md
+target/
+.vscode/
+.idea/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example

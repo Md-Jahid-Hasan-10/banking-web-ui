@@ -24,6 +24,10 @@ const TxFlow = (function () {
             doing: function () { return "Calculating the fee"; },
             done: function () { return "Fee calculated"; }
         },
+        BALANCE_CHECKING: {
+            doing: function () { return "Checking your balance"; },
+            done: function () { return "Balance is enough"; }
+        },
         OTP_PENDING: {
             doing: function () { return "Sending your one-time password"; },
             done: function () { return "One-time password sent"; }
