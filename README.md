@@ -692,3 +692,11 @@ curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/transfers
   `.row-between`, `.accounts`, `.account-card`, `.balance`, `.summary`, `.table-wrap`, `.status`
   (+ per-status colours), `.center`, `.result-banner`, `.progress-row`, `.progress-message`,
   `.spinner`, `.timeline` / `.step-icon`, `.button-row`, `.badge`.
+
+# banking-web-ui
+
+**Author:** [Jahid Hasan](https://github.com/Md-Jahid-Hasan-10)
+
+**Project:** Banking Microservices
+
+> The static browser front end of the banking platform: 8 HTML pages, 4 vanilla-JS modules and one Python file server, talking to nothing but the API gateway on `http://localhost:8080`. Served on port **3000**.
