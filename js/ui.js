@@ -32,6 +32,11 @@ function formatMoney(amount, currency) {
   });
   return currency ? text + " " + currency : text;
 }
+function balanceText(account) {
+  return account.balanceAvailable === false
+      ? "balance unavailable"
+      : formatMoney(account.balance, account.currency);
+}
 
 function formatDate(iso) {
   const d = new Date(iso);

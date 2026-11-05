@@ -322,6 +322,24 @@ python3 serve.py 3000   # explicit port
 `JWT_SECRET` as the user service, and the web UI is served from one of the two origins the gateway
 allows: `http://localhost:3000` or `http://127.0.0.1:3000`.
 
+### The JWT secret must be the same on both sides
+
+The user service **signs** the login token. The gateway **verifies** it. If the two use different
+secrets the login still returns `200` with a token — but the very next call (`GET /api/accounts`
+from the dashboard) comes back `401 Invalid or expired token`, the session is cleared and the
+browser lands back on `login.html`. The symptom is a login that appears to do nothing.
+
+Both services read the secret from `app.jwt.secret`, which resolves from the `JWT_SECRET`
+environment variable. The value now lives in the root `run.env`, which `run-all.sh` exports to
+every service, so it wins over any `.env` file a service happens to pick up from its working
+directory. The built-in defaults in `application.yaml` are also identical, so a service started
+without any `.env` at all still agrees with the others.
+
+> Every service is started with the **same working directory**, so
+> `spring.config.import: optional:file:.env` loads that one `.env` for all of them. If a `.env` in
+> that folder is missing `JWT_SECRET`, each service falls back to its own default — and if those
+> defaults differ, the login loop above appears.
+
 ## Behaviour Rules
 
 ### User-facing workflows
@@ -633,6 +651,7 @@ curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/transfers
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| Logging in does nothing — the page stays on `login.html` | The gateway and the user service use **different `JWT_SECRET` values**. The login returns 200 with a token, but the next call answers `401 Invalid or expired token`, the session is cleared and the browser returns to `login.html` | Make both sides use one secret. It lives in the root `run.env`; the built-in defaults in `application.yaml` are identical too. Restart the gateway and the user service after changing it |
 | `Cannot reach the server. Is the gateway running on port 8080?` | The API gateway is not running, or `CONFIG.API_BASE` points elsewhere | Start the gateway; check `js/config.js` |
 | The browser console shows a CORS error | The UI is served from an origin that is not in `allowedOrigins` | Serve the UI on `http://localhost:3000` or `http://127.0.0.1:3000` |
 | The page is blank after opening `http://localhost:3000` | `index.html` is a redirector and the browser blocked the redirect, or `serve.py` is not running | Check `logs/banking-web-ui.log`; open `http://localhost:3000/login.html` directly |

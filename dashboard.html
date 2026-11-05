@@ -11,6 +11,9 @@
 <main class="container">
   <h1 id="welcome">Dashboard</h1>
   <div id="msg" class="msg" hidden></div>
+  <div id="degraded" class="msg info" hidden>
+    Some balances are temporarily unavailable. They will appear again by themselves.
+  </div>
 
   <section class="card">
     <div class="row-between">
@@ -40,12 +43,15 @@
 
     const POLL_MS = 1500;
     const MAX_POLLS = 40;
+    const DEGRADED_POLL_MS = 5000;
+    const MAX_DEGRADED_POLLS = 36;
 
     const msg = $("msg");
     const list = $("accounts");
     const createBtn = $("createBtn");
 
     let pollsLeft = MAX_POLLS;
+    let degradedPollsLeft = MAX_DEGRADED_POLLS;
     let timer = null;
     const waiting = new Set();
 
@@ -65,6 +71,8 @@
           pending.appendChild(makeEl("span", "spinner"));
           pending.appendChild(makeEl("span", "", "Opening your account..."));
           card.appendChild(pending);
+        } else if (a.balanceAvailable === false) {
+          card.appendChild(makeEl("div", "balance unavailable", "Balance unavailable"));
         } else {
           const balance = makeEl("div", "balance", formatMoney(a.balance, a.currency));
           if (a.status === "BLOCKED") {
@@ -107,9 +115,15 @@
         });
 
         const hasPending = accounts.some(function (a) { return a.status === "PENDING"; });
+        const degraded = accounts.some(function (a) { return a.balanceAvailable === false; });
+        $("degraded").hidden = !degraded;
+
         if (hasPending && pollsLeft > 0) {
           pollsLeft--;
           timer = setTimeout(load, POLL_MS);
+        } else if (degraded && degradedPollsLeft > 0) {
+          degradedPollsLeft--;
+          timer = setTimeout(load, DEGRADED_POLL_MS);
         } else if (hasPending) {
           showMessage(msg, "Your new account is still being opened. Refresh this page in a moment.", "info");
         }
@@ -125,6 +139,7 @@
         const account = await Api.createAccount($("accountType").value);
         waiting.add(account.accountNumber);
         pollsLeft = MAX_POLLS;
+        degradedPollsLeft = MAX_DEGRADED_POLLS;
         await load();
       } catch (err) {
         showMessage(msg, err.message, "error");

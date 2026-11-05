@@ -68,7 +68,7 @@
             accounts.forEach(function (a) {
                 const opt = document.createElement("option");
                 opt.value = a.accountNumber;
-                opt.textContent = a.accountNumber + " (" + formatMoney(a.balance, a.currency) + ")";
+                opt.textContent = a.accountNumber + " (" + balanceText(a) + ")";
                 accountSel.appendChild(opt);
             });
             if (previous) accountSel.value = previous;

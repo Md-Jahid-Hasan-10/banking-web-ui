@@ -39,8 +39,13 @@
       const msg = $("msg");
       const btn = $("submit");
 
-      if (new URLSearchParams(window.location.search).get("registered") === "1") {
+      const params = new URLSearchParams(window.location.search);
+
+      if (params.get("registered") === "1") {
         showMessage(msg, "Registration successful. Please log in.", "success");
+      } else if (params.get("reason")) {
+        // The session ended on another page and sent the user back here.
+        showMessage(msg, params.get("reason"), "info");
       }
 
       $("form").addEventListener("submit", async function (e) {

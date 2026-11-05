@@ -32,8 +32,12 @@ const Session = {
   }
 };
 
-function redirectToLogin() {
-  window.location.replace("login.html");
+function redirectToLogin(reason) {
+  // The reason travels in the query string so the login page can tell the
+  // user WHY they are back there. Without it a session that died on the
+  // dashboard looks exactly like a login that did nothing.
+  const suffix = reason ? "?reason=" + encodeURIComponent(reason) : "";
+  window.location.replace("login.html" + suffix);
 }
 
 function requireAuth() {
@@ -84,11 +88,25 @@ async function request(path, options) {
 
   if (res.status === 401 && auth) {
     Session.clear();
-    redirectToLogin();
+    redirectToLogin("Your session ended. Please log in again.");
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, (data && data.message) || "Request failed (" + res.status + ")");
+    const traceId = (data && data.traceId) || res.headers.get("X-Trace-Id");
+    const retryAfter = Number(res.headers.get("Retry-After")) || 0;
+    let message = (data && data.message) || "Request failed (" + res.status + ")";
+    if (retryAfter > 0) {
+      message += " (try again in " + retryAfter + " seconds)";
+    }
+    // For a server error the user gets a reference that support can open in Tempo.
+    if (res.status >= 500 && traceId) {
+      message += " (reference: " + traceId + ")";
+    }
+    const error = new ApiError(res.status, message);
+    error.traceId = traceId;
+    error.code = data && data.code ? data.code : null;
+    error.retryAfter = retryAfter;
+    throw error;
   }
   return data;
 }

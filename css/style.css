@@ -209,3 +209,5 @@ a.link { color: var(--primary); }
   background: var(--muted-bg);
   font-size: 0.75rem;
 }
+/* ---- S4: degraded balances ---- */
+.account-card .balance.unavailable { font-size: 1rem; color: var(--muted); }
